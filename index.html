@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>StudySnap - Foto naar Toets</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Flashcard 3D flip effect */
+    .perspective { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans pb-10">
+
+  <!-- Header -->
+  <header class="bg-indigo-600 text-white p-4 sticky top-0 z-50 shadow-md flex justify-between items-center">
+    <div class="flex items-center gap-2">
+      <span class="text-2xl">📸</span>
+      <div>
+        <h1 class="font-extrabold text-base sm:text-lg leading-tight">StudySnap</h1>
+        <p class="text-[11px] text-indigo-200">Foto van lesstof naar interactieve toets</p>
+      </div>
+    </div>
+    <button onclick="openSettings()" class="p-2 rounded-full hover:bg-indigo-700 text-xl" title="Instellingen">⚙️</button>
+  </header>
+
+  <main class="flex-1 p-4 max-w-xl mx-auto w-full">
+
+    <!-- FASE 1: FOTO'S MAKEN / KIEZEN -->
+    <div id="step-upload" class="space-y-4">
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 text-center space-y-3">
+        <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-3xl">
+          📖
+        </div>
+        <h2 class="text-lg font-bold text-slate-900">Fotografeer je bladzijde(s)</h2>
+        <p class="text-xs text-slate-500">Maak duidelijke foto's van de theorie, woordjes of samenvatting in je boek.</p>
+        
+        <label class="block w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm cursor-pointer shadow-md transition-all active:scale-95">
+          📷 Maak foto of kies uit galerij
+          <input type="file" id="camera-input" accept="image/*" multiple class="hidden" onchange="handleImageSelection(event)">
+        </label>
+      </div>
+
+      <!-- Preview van geselecteerde foto's -->
+      <div id="preview-container" class="hidden space-y-3">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Geselecteerde pagina's (<span id="photo-count">0</span>)</h3>
+        <div id="thumbnails" class="grid grid-cols-3 gap-2"></div>
+        
+        <button onclick="generateQuiz()" id="btn-generate" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2">
+          <span>✨ Maak Oefentoets met Gemini</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- LAADSCHERM -->
+    <div id="step-loading" class="hidden text-center py-16 space-y-4">
+      <div class="w-14 h-14 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <h3 class="text-base font-bold text-slate-800">Gemini leest je pagina's...</h3>
+      <p class="text-xs text-slate-500 max-w-xs mx-auto">Vragen, antwoorden, begrippen en uitspraak worden klaargezet.</p>
+    </div>
+
+    <!-- FASE 2: DE TOETS & OEFENMODI -->
+    <div id="step-quiz" class="hidden space-y-4">
+      
+      <!-- Modi Knoppen -->
+      <div class="grid grid-cols-4 gap-1.5 bg-slate-200 p-1.5 rounded-xl font-bold text-xs">
+        <button onclick="setMode('mc')" id="tab-mc" class="py-2 rounded-lg bg-white shadow text-indigo-600">Meerkeuze</button>
+        <button onclick="setMode('cards')" id="tab-cards" class="py-2 rounded-lg text-slate-600">Kaartjes</button>
+        <button onclick="setMode('write')" id="tab-write" class="py-2 rounded-lg text-slate-600">Schrijven</button>
+        <button onclick="setMode('speak')" id="tab-speak" class="py-2 rounded-lg text-slate-600">Spreken</button>
+      </div>
+
+      <!-- Oefengebied container -->
+      <div id="quiz-area" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 min-h-[360px] flex flex-col justify-between">
+        <!-- Wordt dynamisch ingevuld door JS -->
+      </div>
+
+      <button onclick="resetAll()" class="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 text-center">
+        ← Andere bladzijde fotograferen
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Instellingen Modal voor Gemini API Key -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl">
+      <h3 class="text-base font-bold text-slate-900">Gemini API Koppeling</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">
+        Vul hier je gratis Google AI Studio API-key in. Deze wordt veilig lokaal in de browser opgeslagen.
+      </p>
+      <input type="password" id="api-key-input" placeholder="AIzaSy..." class="w-full p-3 border border-slate-300 rounded-xl text-xs font-mono">
+      <div class="flex gap-2">
+        <button onclick="saveApiKey()" class="flex-1 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl">Opslaan</button>
+        <button onclick="closeSettings()" class="px-4 py-2.5 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl">Sluiten</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Globale App Status
+    let base64Images = [];
+    let quizData = null;
+    let currentMode = 'mc';
+    let currentIndex = 0;
+    let cardFlipped = false;
+    let recognition = null;
+
+    // Browser Spraakherkenning initialiseren indien beschikbaar
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.lang = 'nl-NL';
+      recognition.interimResults = false;
+    }
+
+    function openSettings() {
+      document.getElementById('api-key-input').value = localStorage.getItem('gemini_api_key') || '';
+      document.getElementById('settings-modal').classList.remove('hidden');
+    }
+
+    function closeSettings() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+
+    function saveApiKey() {
+      const val = document.getElementById('api-key-input').value.trim();
+      if (val) {
+        localStorage.setItem('gemini_api_key', val);
+        alert('API Key opgeslagen!');
+        closeSettings();
+      }
+    }
+
+    // Foto verwerking (inclusief comprimeren om dataverbruik laag te houden)
+    async function handleImageSelection(event) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      base64Images = [];
+      const thumbContainer = document.getElementById('thumbnails');
+      thumbContainer.innerHTML = '';
+
+      for (const file of files) {
+        const base64 = await resizeAndConvertImage(file);
+        base64Images.push(base64);
+
+        const img = document.createElement('img');
+        img.src = base64;
+        img.className = 'h-24 w-full object-cover rounded-xl border border-slate-200';
+        thumbContainer.appendChild(img);
+      }
+
+      document.getElementById('photo-count').textContent = base64Images.length;
+      document.getElementById('preview-container').classList.remove('hidden');
+    }
+
+    function resizeAndConvertImage(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_DIM = 1200; // Ideale resolutie voor Gemini OCR
+            let w = img.width;
+            let h = img.height;
+
+            if (w > h && w > MAX_DIM) {
+              h = Math.round((h * MAX_DIM) / w);
+              w = MAX_DIM;
+            } else if (h > MAX_DIM) {
+              w = Math.round((w * MAX_DIM) / h);
+              h = MAX_DIM;
+            }
+
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Aanroep naar Gemini 1.5 Flash Vision
+    async function generateQuiz() {
+      const apiKey = localStorage.getItem('gemini_api_key');
+      if (!apiKey) {
+        alert('Stel eerst je Gemini API Key in via het tandwieltje rechtsboven.');
+        openSettings();
+        return;
+      }
+
+      document.getElementById('step-upload').classList.add('hidden');
+      document.getElementById('step-loading').classList.remove('hidden');
+
+      // Bouw de payload met alle foto's
+      const imageParts = base64Images.map(b64 => ({
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: b64.split(',')[1]
+        }
+      }));
+
+      const prompt = `
+Je bent een interactieve studiehulp voor scholieren. Lees de theorie op de bijgevoegde foto's aandachtig.
+Maak een complete oefenset in valide JSON (zonder markdown code blocks of extra tekst, puur JSON).
+
+JSON-formaat:
+{
+  "topic": "Korte titel van de lesstof",
+  "flashcards": [
+    {"term": "Begrip of vreemd woord", "definition": "Uitleg of vertaling in het Nederlands"}
+  ],
+  "mc_questions": [
+    {
+      "question": "Duidelijke inhoudelijke meerkeuzevraag over de kern",
+      "options": ["Optie A", "Optie B", "Optie C", "Optie D"],
+      "correct": 0,
+      "explanation": "Korte uitleg waarom dit klopt"
+    }
+  ],
+  "open_questions": [
+    {
+      "question": "Open vraag die test of je het begrijpt",
+      "model_answer": "Kernantwoord met essentiële steekwoorden",
+      "keywords": ["trefwoord1", "trefwoord2"]
+    }
+  ]
+}
+Maak minimaal 5 flashcards, 5 meerkeuzevragen en 3 open vragen op basis van de stof.`;
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: prompt }, ...imageParts]
+            }],
+            generationConfig: {
+              response_mime_type: "application/json"
+            }
+          })
+        });
+
+        const resData = await response.json();
+        const rawJson = resData.candidates[0].content.parts[0].text;
+        quizData = JSON.parse(rawJson);
+
+        document.getElementById('step-loading').classList.add('hidden');
+        document.getElementById('step-quiz').classList.remove('hidden');
+        setMode('mc');
+
+      } catch (err) {
+        console.error(err);
+        alert('Er ging iets mis bij het genereren: ' + err.message);
+        document.getElementById('step-loading').classList.add('hidden');
+        document.getElementById('step-upload').classList.remove('hidden');
+      }
+    }
+
+    // Switch tussen de vier oefenmodi
+    function setMode(mode) {
+      currentMode = mode;
+      currentIndex = 0;
+      cardFlipped = false;
+
+      const tabs = ['mc', 'cards', 'write', 'speak'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === mode) {
+          btn.className = "py-2 rounded-lg bg-white shadow text-indigo-600 font-extrabold";
+        } else {
+          btn.className = "py-2 rounded-lg text-slate-600 font-bold";
+        }
+      });
+
+      renderCurrentMode();
+    }
+
+    function renderCurrentMode() {
+      const area = document.getElementById('quiz-area');
+      area.innerHTML = '';
+
+      if (currentMode === 'mc') renderMC(area);
+      else if (currentMode === 'cards') renderCards(area);
+      else if (currentMode === 'write') renderWrite(area);
+      else if (currentMode === 'speak') renderSpeak(area);
+    }
+
+    /* 1. MEERKEUZE */
+    function renderMC(container) {
+      const q = quizData.mc_questions[currentIndex];
+      if (!q) {
+        container.innerHTML = `<div class="text-center py-10"><h3 class="text-lg font-bold text-emerald-600">🎉 Meerkeuze afgerond!</h3><p class="text-xs text-slate-500 mt-1">Kies een andere modus hierboven om verder te oefenen.</p></div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center text-xs font-mono text-slate-400">
+            <span>Vraag ${currentIndex + 1} van ${quizData.mc_questions.length}</span>
+            <span>Meerkeuze</span>
+          </div>
+          <h3 class="text-base font-extrabold text-slate-900 leading-snug">${q.question}</h3>
+          <div class="space-y-2 pt-2" id="options-container">
+            ${q.options.map((opt, i) => `
+              <button onclick="checkMC(${i})" class="w-full text-left p-3.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-all flex items-center justify-between">
+                <span>${opt}</span>
+                <span class="text-slate-300">○</span>
+              </button>
+            `).join('')}
+          </div>
+          <div id="feedback" class="hidden p-3 rounded-xl text-xs mt-3"></div>
+        </div>
+        <div class="pt-4 flex justify-end">
+          <button onclick="nextItem()" id="btn-next" class="hidden px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold">Volgende →</button>
+        </div>
+      `;
+    }
+
+    function checkMC(selected) {
+      const q = quizData.mc_questions[currentIndex];
+      const optButtons = document.querySelectorAll('#options-container button');
+      const fb = document.getElementById('feedback');
+
+      optButtons.forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === q.correct) {
+          btn.className = "w-full text-left p-3.5 rounded-xl border border-emerald-500 bg-emerald-50 text-emerald-900 text-xs sm:text-sm font-bold flex justify-between";
+          btn.querySelector('span:last-child').textContent = "✓";
+        } else if (i === selected) {
+          btn.className = "w-full text-left p-3.5 rounded-xl border border-red-500 bg-red-50 text-red-900 text-xs sm:text-sm font-bold flex justify-between";
+          btn.querySelector('span:last-child').textContent = "✕";
+        }
+      });
+
+      fb.classList.remove('hidden');
+      if (selected === q.correct) {
+        fb.className = "p-3 rounded-xl text-xs bg-emerald-100 text-emerald-800 font-medium";
+        fb.textContent = "Helemaal goed! " + (q.explanation || '');
+      } else {
+        fb.className = "p-3 rounded-xl text-xs bg-red-100 text-red-800 font-medium";
+        fb.textContent = "Helaas. " + (q.explanation || '');
+      }
+      document.getElementById('btn-next').classList.remove('hidden');
+    }
+
+    /* 2. FLASHCARDS */
+    function renderCards(container) {
+      const card = quizData.flashcards[currentIndex];
+      if (!card) {
+        container.innerHTML = `<div class="text-center py-10"><h3 class="text-lg font-bold text-emerald-600">🎉 Alle kaartjes geoefend!</h3></div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center text-xs font-mono text-slate-400">
+            <span>Kaart ${currentIndex + 1} van ${quizData.flashcards.length}</span>
+            <span>Tik om te draaien 🔄</span>
+          </div>
+          
+          <div onclick="flipCard()" class="w-full h-52 bg-gradient-to-br from-indigo-500 to-indigo-700 text-white rounded-2xl p-6 flex flex-col justify-center items-center text-center cursor-pointer shadow-lg transition-transform active:scale-95">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-2" id="card-label">BEGRIP</span>
+            <p class="text-lg sm:text-xl font-extrabold" id="card-text">${card.term}</p>
+          </div>
+        </div>
+
+        <div class="pt-4 flex justify-between gap-3">
+          <button onclick="prevItem()" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-700">← Vorige</button>
+          <button onclick="nextItem()" class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-bold text-white">Volgende →</button>
+        </div>
+      `;
+    }
+
+    function flipCard() {
+      const card = quizData.flashcards[currentIndex];
+      cardFlipped = !cardFlipped;
+      const label = document.getElementById('card-label');
+      const text = document.getElementById('card-text');
+
+      if (cardFlipped) {
+        label.textContent = "BETEKENIS";
+        text.textContent = card.definition;
+      } else {
+        label.textContent = "BEGRIP";
+        text.textContent = card.term;
+      }
+    }
+
+    /* 3. SCHRIJVEN (OPEN VRAGEN) */
+    function renderWrite(container) {
+      const q = quizData.open_questions[currentIndex];
+      if (!q) {
+        container.innerHTML = `<div class="text-center py-10"><h3 class="text-lg font-bold text-emerald-600">🎉 Schrijfvragen afgerond!</h3></div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center text-xs font-mono text-slate-400">
+            <span>Vraag ${currentIndex + 1} van ${quizData.open_questions.length}</span>
+            <span>Zelf formuleren</span>
+          </div>
+          <h3 class="text-base font-extrabold text-slate-900">${q.question}</h3>
+          <textarea id="write-input" rows="3" placeholder="Typ hier je antwoord..." class="w-full p-3 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+          <button onclick="checkWrite()" id="btn-check-write" class="w-full py-2.5 bg-slate-800 text-white font-bold text-xs rounded-xl">Controleer mijn antwoord</button>
+          
+          <div id="write-feedback" class="hidden space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <span class="font-bold text-indigo-600 block">Modelantwoord:</span>
+            <p class="text-slate-700">${q.model_answer}</p>
+          </div>
+        </div>
+        <div class="pt-4 flex justify-end">
+          <button onclick="nextItem()" id="btn-next-write" class="hidden px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold">Volgende vraag →</button>
+        </div>
+      `;
+    }
+
+    function checkWrite() {
+      document.getElementById('write-feedback').classList.remove('hidden');
+      document.getElementById('btn-check-write').classList.add('hidden');
+      document.getElementById('btn-next-write').classList.remove('hidden');
+    }
+
+    /* 4. SPREKEN (Spraakherkenning / Overhoren) */
+    function renderSpeak(container) {
+      const card = quizData.flashcards[currentIndex];
+      if (!card) {
+        container.innerHTML = `<div class="text-center py-10"><h3 class="text-lg font-bold text-emerald-600">🎉 Spreekoverhoring afgerond!</h3></div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center text-xs font-mono text-slate-400">
+            <span>Item ${currentIndex + 1} van ${quizData.flashcards.length}</span>
+            <span>Spraakoverhoring 🎙️</span>
+          </div>
+
+          <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center space-y-1">
+            <span class="text-[10px] font-bold text-indigo-400 uppercase">Spreek de betekenis in van:</span>
+            <h3 class="text-xl font-extrabold text-indigo-900">${card.term}</h3>
+          </div>
+
+          <div class="flex flex-col items-center justify-center gap-3 py-4">
+            <button onclick="startListening()" id="mic-btn" class="w-16 h-16 bg-rose-500 text-white rounded-full flex items-center justify-center text-2xl shadow-lg active:scale-90 transition-all">
+              🎤
+            </button>
+            <p id="mic-status" class="text-xs text-slate-400">Tik op de microfoon en spreek je antwoord in</p>
+          </div>
+
+          <div id="speak-result-box" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+            <p class="text-slate-500">Jij zei: <strong id="user-spoken-text" class="text-slate-800"></strong></p>
+            <p class="text-slate-500">Juist was: <strong class="text-emerald-700">${card.definition}</strong></p>
+          </div>
+        </div>
+
+        <div class="pt-4 flex justify-end">
+          <button onclick="nextItem()" class="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold">Volgende →</button>
+        </div>
+      `;
+    }
+
+    function startListening() {
+      if (!recognition) {
+        alert('Spraakherkenning wordt niet ondersteund in deze browser. Gebruik Google Chrome op Android.');
+        return;
+      }
+
+      const micBtn = document.getElementById('mic-btn');
+      const micStatus = document.getElementById('mic-status');
+      micBtn.classList.add('animate-pulse', 'bg-rose-600');
+      micStatus.textContent = "Aan het luisteren...";
+
+      recognition.start();
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById('user-spoken-text').textContent = transcript;
+        document.getElementById('speak-result-box').classList.remove('hidden');
+        micBtn.classList.remove('animate-pulse', 'bg-rose-600');
+        micStatus.textContent = "Klaar!";
+      };
+
+      recognition.onerror = () => {
+        micBtn.classList.remove('animate-pulse', 'bg-rose-600');
+        micStatus.textContent = "Niet verstaan, probeer opnieuw.";
+      };
+    }
+
+    // Navigatie helpers
+    function nextItem() {
+      currentIndex++;
+      cardFlipped = false;
+      renderCurrentMode();
+    }
+
+    function prevItem() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        cardFlipped = false;
+        renderCurrentMode();
+      }
+    }
+
+    function resetAll() {
+      base64Images = [];
+      quizData = null;
+      document.getElementById('preview-container').classList.add('hidden');
+      document.getElementById('step-quiz').classList.add('hidden');
+      document.getElementById('step-upload').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
